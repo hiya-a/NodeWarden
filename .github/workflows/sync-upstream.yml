@@ -1,0 +1,60 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    # Run every day at 2:00 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Sync with upstream
+        run: |
+          # Add upstream repository
+          git remote add upstream https://github.com/shuaiplus/nodewarden.git || true
+          
+          # Fetch upstream changes
+          git fetch upstream
+          
+          # Check if there are updates
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+          
+          if [ "$BEHIND" -gt 0 ]; then
+            echo "Found $BEHIND commits behind upstream. Syncing..."
+            
+            # Try to merge upstream/main into current branch
+            if git merge upstream/main --no-edit; then
+              echo "Merge successful!"
+              git push origin main
+            else
+              echo "Merge conflict detected. Please resolve manually."
+              echo "::warning::Failed to auto-sync due to merge conflicts. Manual intervention required."
+              exit 1
+            fi
+          else
+            echo "Already up to date with upstream."
+          fi
+      
+      - name: Create summary
+        if: always()
+        run: |
+          echo "## Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Upstream**: shuaiplus/nodewarden" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: main" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
